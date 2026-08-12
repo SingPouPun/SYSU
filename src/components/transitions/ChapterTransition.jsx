@@ -1,0 +1,12 @@
+export default function ChapterTransition({ chapter }) {
+  if (!chapter) return null
+
+  return (
+    <div className="chapter-transition-scaffold" aria-live="polite">
+      <div className="transition-grid">
+        {chapter.glyphs.map((glyph, index) => <span key={`${glyph}-${index}`}>{glyph}</span>)}
+      </div>
+      <p>{chapter.english} / LOADING ARCHIVE</p>
+    </div>
+  )
+}
