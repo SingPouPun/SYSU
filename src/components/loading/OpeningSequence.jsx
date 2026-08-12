@@ -1,3 +1,5 @@
+import SysuLionRunner from './SysuLionRunner.jsx'
+
 const INITIAL_GLYPHS = ['大', '山', '中', '学']
 
 export default function OpeningSequence({ visible, onFinish }) {
@@ -13,7 +15,8 @@ export default function OpeningSequence({ visible, onFinish }) {
           </div>
         ))}
       </div>
-      <p>第一项任务：让“大山中学”清晰重排为“中山大学”</p>
+      <SysuLionRunner mode="opening" />
+      <p>第一项任务：让中大狮奔跑，并让“大山中学”清晰重排为“中山大学”</p>
       <button type="button" onClick={onFinish}>暂时进入骨架 →</button>
     </section>
   )
