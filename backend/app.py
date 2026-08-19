@@ -74,12 +74,17 @@ class Message(db.Model):
 
 
 def create_app(test_config=None):
-    database_path = Path(os.environ.get("SYSU_DATABASE_PATH", ROOT / "instance" / "sysu.db")).resolve()
-    database_path.parent.mkdir(parents=True, exist_ok=True)
+    database_url = os.environ.get("DATABASE_URL", "").strip()
+    if database_url.startswith("postgres://"):
+        database_url = database_url.replace("postgres://", "postgresql://", 1)
+    if not database_url:
+        database_path = Path(os.environ.get("SYSU_DATABASE_PATH", ROOT / "instance" / "sysu.db")).resolve()
+        database_path.parent.mkdir(parents=True, exist_ok=True)
+        database_url = f"sqlite:///{database_path.as_posix()}"
     app = Flask(__name__, static_folder=str(ROOT / "dist"), static_url_path="")
     app.config.update(
         SECRET_KEY=os.environ.get("SYSU_SECRET_KEY", "dev-only-change-me-before-deploy"),
-        SQLALCHEMY_DATABASE_URI=f"sqlite:///{database_path.as_posix()}",
+        SQLALCHEMY_DATABASE_URI=database_url,
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
@@ -336,11 +341,11 @@ def create_app(test_config=None):
         # create_all 不会为已有 SQLite 表增加字段；这里做最小、可重复的本地迁移。
         user_columns = {column["name"] for column in inspect(db.engine).get_columns("user")}
         if "province" not in user_columns:
-            db.session.execute(text("ALTER TABLE user ADD COLUMN province VARCHAR(20)"))
+            db.session.execute(text('ALTER TABLE "user" ADD COLUMN province VARCHAR(20)'))
         if "city" not in user_columns:
-            db.session.execute(text("ALTER TABLE user ADD COLUMN city VARCHAR(30)"))
+            db.session.execute(text('ALTER TABLE "user" ADD COLUMN city VARCHAR(30)'))
         if "is_admin" not in user_columns:
-            db.session.execute(text("ALTER TABLE user ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT 0"))
+            db.session.execute(text('ALTER TABLE "user" ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT FALSE'))
         message_columns = {column["name"] for column in inspect(db.engine).get_columns("message")}
         if "visibility" not in message_columns:
             db.session.execute(text("ALTER TABLE message ADD COLUMN visibility VARCHAR(16) NOT NULL DEFAULT 'public'"))
