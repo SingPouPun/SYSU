@@ -1,0 +1,13 @@
+.git
+.gitignore
+node_modules
+dist
+.venv
+venv
+instance
+.env
+.recovery-*
+tmp
+*.log
+__pycache__
+*.pyc

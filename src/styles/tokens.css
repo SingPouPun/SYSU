@@ -1,14 +1,22 @@
-:root{
-  --sysu-black:#080a08;
-  --sysu-paper:#f1eee3;
-  --sysu-white:#fff;
-  --sysu-yellow:#ecff35;
-  --sysu-green:#006d4e;
-  --sysu-bright:#00b981;
-  --sysu-red:#b62925;
-  --line:4px;
-  --content:1180px;
-  --cut:polygon(0 0,calc(100% - 24px) 0,100% 24px,100% 100%,24px 100%,0 calc(100% - 24px));
-  --font-ui:Arial,'Microsoft YaHei',sans-serif;
-  --font-display:'Arial Black','Microsoft YaHei',sans-serif;
+:root {
+  --sysu-black: #080a08;
+  --sysu-paper: #f1eee3;
+  --sysu-white: #fff;
+  --sysu-yellow: #ecff35;
+  --sysu-green: #006d4e;
+  --sysu-bright: #00b981;
+  --sysu-red: #b62925;
+  --line: 4px;
+  --content: 1180px;
+  --cut: polygon(
+    0 0,
+    calc(100% - 24px) 0,
+    100% 24px,
+    100% 100%,
+    24px 100%,
+    0 calc(100% - 24px)
+  );
+  --font-ui: Arial, "Microsoft YaHei", sans-serif;
+  --font-display: "Arial Black", "Microsoft YaHei", sans-serif;
+  --font-round: "Arial Rounded MT Bold", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
 }

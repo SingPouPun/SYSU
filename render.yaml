@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: sysu-immersive
+    runtime: docker
+    plan: starter
+    healthCheckPath: /api/health
+    envVars:
+      - key: SYSU_SECRET_KEY
+        generateValue: true
+      - key: SYSU_SECURE_COOKIES
+        value: "1"
+      - key: SYSU_DATABASE_PATH
+        value: /app/storage/sysu.db
+      - key: SYSU_BOOTSTRAP_ADMIN_USER
+        sync: false
+      - key: SYSU_BOOTSTRAP_ADMIN_PASSWORD
+        sync: false
+    disk:
+      name: sysu-data
+      mountPath: /app/storage
+      sizeGB: 1

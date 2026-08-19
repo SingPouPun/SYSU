@@ -1,1 +1,33 @@
-*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;overflow-x:hidden}button,a{font:inherit}button{cursor:pointer}a{color:inherit;text-decoration:none}h1,h2,h3,p{margin-top:0}::selection{background:#ecff35;color:#080a08}
+* {
+  box-sizing: border-box;
+}
+html {
+  scroll-behavior: smooth;
+  overflow-anchor: none;
+}
+body {
+  margin: 0;
+  overflow-x: hidden;
+  overflow-anchor: none;
+}
+button,
+a {
+  font: inherit;
+}
+button {
+  cursor: pointer;
+}
+a {
+  color: inherit;
+  text-decoration: none;
+}
+h1,
+h2,
+h3,
+p {
+  margin-top: 0;
+}
+::selection {
+  background: #ecff35;
+  color: #080a08;
+}

@@ -9,12 +9,15 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@react-three/drei": "^10.7.8",
+    "@react-three/fiber": "^9.7.0",
     "@vitejs/plugin-react": "latest",
+    "framer-motion": "latest",
     "gsap": "^3.13.0",
-    "vite": "latest",
+    "ogl": "^1.0.11",
     "react": "latest",
     "react-dom": "latest",
-    "framer-motion": "latest"
-  },
-  "devDependencies": {}
+    "three": "^0.185.1",
+    "vite": "latest"
+  }
 }
