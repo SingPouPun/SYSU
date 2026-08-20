@@ -10,8 +10,21 @@ const PROVINCES = [
 
 async function readJson(response) {
   const data = await response.json().catch(() => ({}))
-  if (!response.ok) throw new Error(data.error || '连接失败，请稍后重试')
+  if (!response.ok) {
+    const fallback = response.status >= 500
+      ? `服务器接口暂时不可用（HTTP ${response.status}），请检查云端数据库与函数日志`
+      : `请求失败（HTTP ${response.status}）`
+    throw new Error(data.error || fallback)
+  }
   return data
+}
+
+async function fetchApi(path, options) {
+  try {
+    return await fetch(path, options)
+  } catch {
+    throw new Error('无法连接后端服务；本地运行请先启动 Flask，线上请检查部署状态')
+  }
 }
 
 export default function AuthModal({
@@ -19,7 +32,6 @@ export default function AuthModal({
   user,
   onAuthenticated,
   onClose,
-  onLogout,
   openAdminOnSuccess = false,
 }) {
   const [mode, setMode] = useState('login')
@@ -36,9 +48,9 @@ export default function AuthModal({
   const update = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }))
 
   async function requestWithCsrf(path, body) {
-    const tokenResponse = await fetch('/api/csrf-token')
+    const tokenResponse = await fetchApi('/api/csrf-token')
     const { csrf_token: csrfToken } = await readJson(tokenResponse)
-    return readJson(await fetch(path, {
+    return readJson(await fetchApi(path, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
       body: JSON.stringify(body),
@@ -77,52 +89,39 @@ export default function AuthModal({
     }
   }
 
-  async function logout() {
-    setBusy(true)
-    try {
-      await requestWithCsrf('/api/auth/logout', {})
-      onLogout()
-    } catch (error) {
-      setStatus(error.message)
-    } finally {
-      setBusy(false)
-    }
-  }
-
   return (
     <div className="account-modal-backdrop" role="presentation" onMouseDown={(event) => {
       if (event.target === event.currentTarget) onClose()
     }}>
-      <section className="account-modal" role="dialog" aria-modal="true" aria-label="中山大学账号入口">
+      <section className={`account-modal${user ? ' account-modal--profile' : ''}`} role="dialog" aria-modal="true" aria-label="中山大学账号入口">
         <button className="account-modal-close" type="button" onClick={onClose} aria-label="关闭">×</button>
-        <div className="account-modal-brand">
-          <img src="/branding/sysu-emblem.png" alt="" />
-          <span>SYSU / CAMPUS ID</span>
-          <b>{user ? 'WELCOME BACK' : 'HELLO, SYSU'}</b>
-        </div>
 
         {user ? (
           <div className="account-profile-card">
-            <small>ACTIVE STUDENT PROFILE</small>
             <strong>{user.username}</strong>
-            <p>{user.province || '未填写地区'} · {user.city || '未填写城市'}</p>
-            <button type="button" onClick={logout} disabled={busy}>LOG OUT</button>
+            <p>{user.province || '未填写省份'} {user.city || '未填写城市'}</p>
           </div>
         ) : (
           <>
+            <div className="account-modal-brand">
+              <img src="/branding/sysu-emblem.png" alt="" />
+              <span>SYSU / CAMPUS ID</span>
+              <b>你好，中大</b>
+            </div>
+
             <div className="account-mode-tabs" role="tablist" aria-label="登录或注册">
-              <button type="button" className={mode === 'login' ? 'is-active' : ''} onClick={() => setMode('login')}>LOG IN</button>
-              <button type="button" className={mode === 'signup' ? 'is-active' : ''} onClick={() => setMode('signup')}>SIGN IN</button>
+              <button type="button" className={mode === 'login' ? 'is-active' : ''} onClick={() => setMode('login')}>登录</button>
+              <button type="button" className={mode === 'signup' ? 'is-active' : ''} onClick={() => setMode('signup')}>注册</button>
             </div>
 
             <form className="account-form" onSubmit={submit}>
               <label>
-                <span>NAME / 名称</span>
-                <input value={form.username} onChange={update('username')} minLength="3" maxLength="20" autoComplete="username" required />
+                <span>USERNAME / 用户名</span>
+                <input value={form.username} onChange={update('username')} minLength="3" maxLength="20" autoComplete="username" placeholder="请输入用户名" required />
               </label>
               <label>
                 <span>PASSWORD / 密码</span>
-                <input type="password" value={form.password} onChange={update('password')} minLength="8" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} required />
+                <input type="password" value={form.password} onChange={update('password')} minLength="8" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} placeholder="请输入密码" required />
               </label>
 
               {mode === 'signup' && (
@@ -135,7 +134,7 @@ export default function AuthModal({
                   </label>
                   <label>
                     <span>CITY / 城市</span>
-                    <input value={form.city} onChange={update('city')} maxLength="30" required />
+                    <input value={form.city} onChange={update('city')} maxLength="30" placeholder="请输入城市" required />
                   </label>
                 </div>
               )}
@@ -144,7 +143,7 @@ export default function AuthModal({
                 {status || (mode === 'signup' ? 'CREATE YOUR SYSU CAMPUS ID' : 'RETURN TO THE CAMPUS ARCHIVE')}
               </p>
               <button className="account-submit" type="submit" disabled={busy}>
-                {busy ? 'CONNECTING...' : mode === 'login' ? 'LOG IN' : 'SIGN IN'}
+                {busy ? '连接中…' : mode === 'login' ? '登录' : '注册'}
               </button>
             </form>
           </>

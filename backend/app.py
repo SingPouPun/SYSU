@@ -13,6 +13,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 ROOT = Path(__file__).resolve().parents[1]
 db = SQLAlchemy()
+MESSAGE_RESONANCE_GOAL = 40
 
 
 EMOTION_RULES = (
@@ -74,11 +75,18 @@ class Message(db.Model):
 
 
 def create_app(test_config=None):
-    database_url = os.environ.get("DATABASE_URL", "").strip()
+    database_path = None
+    configured_database_url = os.environ.get("DATABASE_URL", "").strip()
+    database_url = configured_database_url
+    is_vercel = bool(os.environ.get("VERCEL"))
+    cloud_database_missing = is_vercel and not configured_database_url
     if database_url.startswith("postgres://"):
         database_url = database_url.replace("postgres://", "postgresql://", 1)
     if not database_url:
-        database_path = Path(os.environ.get("SYSU_DATABASE_PATH", ROOT / "instance" / "sysu.db")).resolve()
+        # Vercel 的函数包是只读的。缺少云数据库时仅用 /tmp 让应用能够
+        # 启动并返回可诊断的 503；认证和寄语接口不会把它当成持久化数据库。
+        default_database_path = Path("/tmp/sysu-diagnostic.db") if is_vercel else ROOT / "instance" / "sysu.db"
+        database_path = Path(os.environ.get("SYSU_DATABASE_PATH", default_database_path)).resolve()
         database_path.parent.mkdir(parents=True, exist_ok=True)
         database_url = f"sqlite:///{database_path.as_posix()}"
     app = Flask(__name__, static_folder=str(ROOT / "dist"), static_url_path="")
@@ -116,6 +124,18 @@ def create_app(test_config=None):
             "is_admin": bool(user.is_admin),
         }
 
+    @app.before_request
+    def require_cloud_database():
+        if (
+            cloud_database_missing
+            and request.path.startswith("/api/")
+            and request.path not in {"/api/health", "/api/csrf-token"}
+        ):
+            return jsonify({
+                "error": "线上数据库尚未配置，请在 Vercel 环境变量中设置 DATABASE_URL 后重新部署",
+                "code": "DATABASE_NOT_CONFIGURED",
+            }), 503
+
     @app.get("/api/csrf-token")
     def csrf_token():
         session.setdefault("csrf_token", secrets.token_urlsafe(32))
@@ -132,8 +152,8 @@ def create_app(test_config=None):
         city = str(data.get("city", "")).strip()
         if not 3 <= len(username) <= 20:
             return jsonify({"error": "用户名需为3–20个字符"}), 400
-        if not all(ch.isalnum() or ch in "_-" for ch in username):
-            return jsonify({"error": "用户名只能包含文字、字母、数字、下划线或连字符"}), 400
+        if not all(ch.isalnum() or ch in "_- " for ch in username) or "  " in username:
+            return jsonify({"error": "用户名只能包含文字、字母、数字、空格、下划线或连字符"}), 400
         if len(password) < 8:
             return jsonify({"error": "密码至少需要8位"}), 400
         if not 2 <= len(province) <= 20:
@@ -181,7 +201,14 @@ def create_app(test_config=None):
 
     @app.get("/api/health")
     def health():
-        return jsonify({"status": "ok", "service": "SYSU Flask API"})
+        response = {
+            "status": "degraded" if cloud_database_missing else "ok",
+            "service": "SYSU Flask API",
+            "database": "not_configured" if cloud_database_missing else db.engine.dialect.name,
+        }
+        if cloud_database_missing:
+            response["error"] = "Set DATABASE_URL in Vercel and redeploy"
+        return jsonify(response), 503 if cloud_database_missing else 200
 
     @app.get("/api/messages")
     def messages():
@@ -196,7 +223,7 @@ def create_app(test_config=None):
         elif not viewer.is_admin:
             query = query.where(or_(Message.visibility == "public", Message.user_id == viewer.id))
         rows = db.session.scalars(query.order_by(Message.created_at.desc())).all()
-        return jsonify({"messages": [row.to_dict() for row in rows], "count": total, "goal": 40})
+        return jsonify({"messages": [row.to_dict() for row in rows], "count": total, "goal": MESSAGE_RESONANCE_GOAL})
 
     @app.get("/api/dashboard")
     def database_dashboard():
@@ -243,16 +270,16 @@ def create_app(test_config=None):
 
         return jsonify({
             "database": {
-                "engine": "SQLite",
-                "file": database_path.name,
-                "size_bytes": database_path.stat().st_size if database_path.exists() else 0,
+                "engine": db.engine.dialect.name.title(),
+                "file": database_path.name if database_path else "Cloud database",
+                "size_bytes": database_path.stat().st_size if database_path and database_path.exists() else 0,
             },
             "counts": {
                 "users": user_count,
                 "messages": message_count,
                 "real_messages": message_count - demo_count,
                 "demo_messages": demo_count,
-                "completion": round(min(1, (message_count - demo_count) / 40) * 100, 1),
+                "completion": round(min(1, (message_count - demo_count) / MESSAGE_RESONANCE_GOAL) * 100, 1),
             },
             "provinces": [
                 {
@@ -288,7 +315,7 @@ def create_app(test_config=None):
         count = db.session.scalar(
             select(func.count()).select_from(Message).where(Message.is_demo.is_(False))
         ) or 0
-        return jsonify({"message": message.to_dict(), "count": count, "resonance": count >= 40}), 201
+        return jsonify({"message": message.to_dict(), "count": count, "resonance": count >= MESSAGE_RESONANCE_GOAL}), 201
 
     @app.get("/")
     def index():
@@ -351,19 +378,34 @@ def create_app(test_config=None):
             db.session.execute(text("ALTER TABLE message ADD COLUMN visibility VARCHAR(16) NOT NULL DEFAULT 'public'"))
         db.session.commit()
 
-        # 云端首次部署可用环境变量创建管理员；已有账号不会被反复改密。
+        # 云端部署用环境变量维护管理员，避免把管理员密码提交到公开仓库。
         bootstrap_name = os.environ.get("SYSU_BOOTSTRAP_ADMIN_USER", "").strip()
         bootstrap_password = os.environ.get("SYSU_BOOTSTRAP_ADMIN_PASSWORD", "")
+        bootstrap_province = os.environ.get("SYSU_BOOTSTRAP_ADMIN_PROVINCE", "广东省").strip() or "广东省"
         if bootstrap_name and len(bootstrap_password) >= 8:
             bootstrap_user = db.session.scalar(select(User).where(User.username == bootstrap_name))
+            bootstrap_changed = False
             if bootstrap_user is None:
-                db.session.add(User(
+                bootstrap_user = User(
                     username=bootstrap_name,
                     password_hash=generate_password_hash(bootstrap_password),
-                    province="管理员",
+                    province=bootstrap_province,
                     city="云端控制台",
                     is_admin=True,
-                ))
+                )
+                db.session.add(bootstrap_user)
+                bootstrap_changed = True
+            else:
+                if not check_password_hash(bootstrap_user.password_hash, bootstrap_password):
+                    bootstrap_user.password_hash = generate_password_hash(bootstrap_password)
+                    bootstrap_changed = True
+                if bootstrap_user.province != bootstrap_province:
+                    bootstrap_user.province = bootstrap_province
+                    bootstrap_changed = True
+                if not bootstrap_user.is_admin:
+                    bootstrap_user.is_admin = True
+                    bootstrap_changed = True
+            if bootstrap_changed:
                 db.session.commit()
     return app
 

@@ -98,3 +98,14 @@ GitHub Pages 只能托管静态前端，不能运行本项目的 Flask、Session
 管理员首次创建成功后，可在 Render 环境变量中删除上述两个初始化变量。数据库位于持久化磁盘 `/app/storage/sysu.db`，不会因普通重新部署而丢失。
 
 管理员在主站登录后，主站标签页会保留，并自动打开独立的 `/admin` 标签页。浏览器若拦截弹窗，可点击顶部数据库图标重新打开。
+
+## Vercel 登录与数据库配置
+
+Vercel 函数的部署文件系统是只读的，不能把项目内的 SQLite 文件作为正式数据库。若部署在 Vercel，必须在项目的 Settings → Environment Variables 中配置：
+
+- `DATABASE_URL`：Neon PostgreSQL 的连接串，至少勾选 Production；若也测试 Preview，则同时勾选 Preview
+- `SYSU_SECRET_KEY`：随机且长期固定的会话密钥
+- `SYSU_SECURE_COOKIES=1`
+- `SYSU_BOOTSTRAP_ADMIN_USER` 与 `SYSU_BOOTSTRAP_ADMIN_PASSWORD`：仅在需要初始化管理员时设置
+
+保存后重新部署，并先访问 `https://你的域名/api/health`。返回 `status: ok` 且 `database: postgresql` 后，注册和登录才具备持久化条件。若返回 `DATABASE_NOT_CONFIGURED`，说明 `DATABASE_URL` 没有配置到当前部署环境。
