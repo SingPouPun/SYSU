@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import secrets
+import tempfile
 import click
 from datetime import datetime, timezone
 from pathlib import Path
@@ -89,7 +90,15 @@ def create_app(test_config=None):
         database_path = Path(os.environ.get("SYSU_DATABASE_PATH", default_database_path)).resolve()
         database_path.parent.mkdir(parents=True, exist_ok=True)
         database_url = f"sqlite:///{database_path.as_posix()}"
-    app = Flask(__name__, static_folder=str(ROOT / "dist"), static_url_path="")
+    # Flask 默认把 instance 目录放在部署包内；Vercel 的部署包只读，
+    # 因此必须把这个运行时目录显式放到可写的 /tmp。
+    instance_path = str(Path(tempfile.gettempdir()) / "sysu-instance") if is_vercel else None
+    app = Flask(
+        __name__,
+        static_folder=str(ROOT / "dist"),
+        static_url_path="",
+        instance_path=instance_path,
+    )
     app.config.update(
         SECRET_KEY=os.environ.get("SYSU_SECRET_KEY", "dev-only-change-me-before-deploy"),
         SQLALCHEMY_DATABASE_URI=database_url,
