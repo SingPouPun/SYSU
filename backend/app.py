@@ -26,6 +26,15 @@ EMOTION_RULES = (
 )
 
 
+def normalize_database_url(database_url: str) -> str:
+    """让 SQLAlchemy 使用 requirements.txt 中安装的 psycopg 3 驱动。"""
+    if database_url.startswith("postgres://"):
+        return database_url.replace("postgres://", "postgresql+psycopg://", 1)
+    if database_url.startswith("postgresql://"):
+        return database_url.replace("postgresql://", "postgresql+psycopg://", 1)
+    return database_url
+
+
 def classify_message_emotion(content: str):
     """轻量、可解释的寄语情绪分类；后续可无缝替换成 LLM 服务。"""
     scores = []
@@ -78,11 +87,9 @@ class Message(db.Model):
 def create_app(test_config=None):
     database_path = None
     configured_database_url = os.environ.get("DATABASE_URL", "").strip()
-    database_url = configured_database_url
+    database_url = normalize_database_url(configured_database_url)
     is_vercel = bool(os.environ.get("VERCEL"))
     cloud_database_missing = is_vercel and not configured_database_url
-    if database_url.startswith("postgres://"):
-        database_url = database_url.replace("postgres://", "postgresql://", 1)
     if not database_url:
         # Vercel 的函数包是只读的。缺少云数据库时仅用 /tmp 让应用能够
         # 启动并返回可诊断的 503；认证和寄语接口不会把它当成持久化数据库。
