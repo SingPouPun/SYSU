@@ -16,13 +16,13 @@ export const CULTURE_ASSETS = {
 }
 
 const line = (index, position) => ({
-  src: `/culture/anthem-line-${String(index).padStart(2, '0')}.png`,
+  src: `/culture/anthem-line-${String(index).padStart(2, '0')}-transparent.png`,
   position,
 })
 
 export const CULTURE_ANTHEM_SCENES = [
   { src: '/culture/anthem-scene-01.png', lines: [line(1, 'top-left')] },
-  { src: '/culture/anthem-scene-02.png', lines: [line(2, 'bottom-right')] },
+  { src: '/culture/anthem-scene-02.png', lines: [line(2, 'sky-top-right')] },
   { src: '/culture/anthem-scene-03.png', lines: [line(3, 'top-right'), line(4, 'bottom-left')] },
   { src: '/culture/anthem-scene-04.png', lines: [line(5, 'top-left'), line(6, 'bottom-right')] },
   { src: '/culture/motto-calligraphy.png', lines: [] },

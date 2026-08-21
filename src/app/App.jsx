@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { gsap } from 'gsap'
 import SiteHeader from '../components/layout/SiteHeader.jsx'
 import ProgressRail from '../components/layout/ProgressRail.jsx'
@@ -13,10 +13,13 @@ import DisciplinesSection from '../sections/DisciplinesSection.jsx'
 import CampusesSection from '../sections/CampusesSection.jsx'
 import MessagesSection from '../sections/MessagesSection.jsx'
 import PoemGift from '../components/poem/PoemGift.jsx'
+import PoemLauncher from '../components/poem/PoemLauncher.jsx'
 import AuthModal from '../components/auth/AuthModal.jsx'
 import ShareModal from '../components/share/ShareModal.jsx'
 import AdminPortal from '../components/database/AdminPortal.jsx'
-import { CHAPTERS } from '../data/chapters.js'
+import { ARCHIVE_BOOKS, CHAPTERS } from '../data/chapters.js'
+import { DEMO_MODE } from '../config/runtime.js'
+import { clearExperienceProgress } from '../utils/experienceProgress.js'
 
 const PAGE_SECTIONS = [
   { id: 'top', name: '首页', kind: 'direct' },
@@ -36,6 +39,7 @@ function MainExperience() {
   const [activePage, setActivePage] = useState('top')
   const [transition, setTransition] = useState(null)
   const [cdTransition, setCdTransition] = useState(null)
+  const [archiveChapterId, setArchiveChapterId] = useState('history')
   const [poemVisible, setPoemVisible] = useState(false)
   const [headerVisible, setHeaderVisible] = useState(true)
   const [authVisible, setAuthVisible] = useState(false)
@@ -47,6 +51,11 @@ function MainExperience() {
   const navigationLockRef = useRef({ pageId: null, until: 0 })
   const lastScrollYRef = useRef(0)
   const headerHoldUntilRef = useRef(0)
+
+  useLayoutEffect(() => {
+    if ('scrollRestoration' in window.history) window.history.scrollRestoration = 'manual'
+    window.scrollTo(0, 0)
+  }, [])
 
   function lockPageNavigation(pageId, duration = 1000) {
     navigationLockRef.current = {
@@ -74,6 +83,10 @@ function MainExperience() {
   }, [])
 
   useEffect(() => {
+    if (DEMO_MODE) {
+      setAuthReady(true)
+      return undefined
+    }
     let cancelled = false
     fetch('/api/auth/me')
       .then((response) => response.ok ? response.json() : { user: null })
@@ -88,7 +101,7 @@ function MainExperience() {
   }, [])
 
   useEffect(() => {
-    if (openingVisible || !authReady || user || authPromptedRef.current) return
+    if (DEMO_MODE || openingVisible || !authReady || user || authPromptedRef.current) return
     authPromptedRef.current = true
     setAuthVisible(true)
   }, [openingVisible, authReady, user])
@@ -240,6 +253,7 @@ function MainExperience() {
   function openChapterFromBook(chapter) {
     if (transition || cdTransition) return
     rememberChapter(chapter.id)
+    setArchiveChapterId(chapter.id)
     setCdTransition(chapter)
   }
 
@@ -314,8 +328,11 @@ function MainExperience() {
 
   const returnToArchiveLibrary = useCallback(() => {
     if (transition || cdTransition) return
+    if (ARCHIVE_BOOKS.some((book) => book.chapter === activePage)) {
+      setArchiveChapterId(activePage)
+    }
     setTransition(ARCHIVE_RETURN_TRANSITION)
-  }, [transition, cdTransition])
+  }, [activePage, transition, cdTransition])
 
   const activeContentChapter = CHAPTERS.find((chapter) => chapter.id === activePage)
 
@@ -365,7 +382,7 @@ function MainExperience() {
         onNavigate={navigateTo}
         onShare={() => setShareVisible(true)}
         onDatabase={user?.is_admin ? () => window.open('/admin', 'sysu-admin-console') : undefined}
-        onAccount={() => setAuthVisible(true)}
+        onAccount={DEMO_MODE ? undefined : () => setAuthVisible(true)}
         user={user}
       />
       <div
@@ -377,7 +394,12 @@ function MainExperience() {
 
       <main>
         {activePage === 'top' && <HeroSection onStart={revealArchiveLibrary} />}
-        {activePage === 'archives' && <ArchiveLibrary onOpenChapter={openChapterFromBook} />}
+        {activePage === 'archives' && (
+          <ArchiveLibrary
+            initialChapterId={archiveChapterId}
+            onOpenChapter={openChapterFromBook}
+          />
+        )}
         {activeContentChapter && (
           <div
             className="chapter-flow-shell chapter-flow-shell--single"
@@ -398,24 +420,23 @@ function MainExperience() {
         )}
       </main>
 
-      {activePage === 'messages' && <footer className="workshop-footer">
-        <strong>中山大学 SYSU</strong>
-        <span>FOUR-DAY INTERACTIVE WEB WORKSHOP</span>
-        <button type="button" onClick={() => setPoemVisible(true)}>再次品读 · 小词礼包</button>
-      </footer>}
+      {activePage === 'messages' && <PoemLauncher onOpen={() => setPoemVisible(true)} />}
 
       <PoemGift visible={poemVisible} onClose={() => setPoemVisible(false)} />
-      <AuthModal
+      {!DEMO_MODE && <AuthModal
         visible={authVisible}
         user={user}
         onAuthenticated={(nextUser) => {
           setUser(nextUser)
           setAuthVisible(false)
         }}
-        onLogout={() => setUser(null)}
+        onLogout={() => {
+          clearExperienceProgress()
+          window.location.replace(`${window.location.pathname}${window.location.search}`)
+        }}
         onClose={() => setAuthVisible(false)}
         openAdminOnSuccess
-      />
+      />}
       <ShareModal visible={shareVisible} onClose={() => setShareVisible(false)} />
     </div>
   )

@@ -6,6 +6,7 @@ import {
   CULTURE_ASSETS,
   CULTURE_SHOT_ONE,
 } from './cultureExperienceConfig.js'
+import { readExperienceProgress, writeExperienceProgress } from '../../utils/experienceProgress.js'
 
 gsap.registerPlugin(ScrollTrigger)
 
@@ -38,10 +39,10 @@ function LyricArt({ line, order }) {
 function WindowFrame({ src, fit = 'contain', lines = [], kind = 'anthem', reveal, revealed, onReveal }) {
   return (
     <figure className={`culture-window-frame culture-window-frame--${kind}${reveal ? ' culture-window-frame--finale' : ''}${revealed ? ' is-revealed' : ''}`}>
-      <img className="culture-window-image" src={src} alt="" style={{ objectFit: fit }} />
+      <img className="culture-window-image" src={src} alt="" decoding="async" draggable="false" style={{ objectFit: fit }} />
       {reveal && (
         <>
-          <img className="culture-window-reveal-image" src={reveal} alt="" />
+          <img className="culture-window-reveal-image" src={reveal} alt="" decoding="async" draggable="false" />
           <button
             className="culture-huaishi-hotspot"
             type="button"
@@ -108,7 +109,14 @@ function HaitangViewport({ frames, finaleRevealed, onFinaleReveal }) {
 export default function CultureImmersiveStage() {
   const rootRef = useRef(null)
   const stageRef = useRef(null)
-  const [finaleRevealed, setFinaleRevealed] = useState(false)
+  const [finaleRevealed, setFinaleRevealed] = useState(() => (
+    readExperienceProgress('sysu-culture-stone-revealed', false) === true
+  ))
+
+  function revealFinale() {
+    setFinaleRevealed(true)
+    writeExperienceProgress('sysu-culture-stone-revealed', true)
+  }
 
   const frames = useMemo(() => [
     ...CULTURE_ASSETS.opening.map((item) => ({ ...item, kind: 'opening', lines: [] })),
@@ -144,7 +152,6 @@ export default function CultureImmersiveStage() {
 
       stage.style.setProperty('--culture-full-emblem-opacity', emblemOpacity)
       stage.style.setProperty('--culture-emblem-scale', emblemScale)
-      stage.style.setProperty('--culture-emblem-blur', `${outro > 0 ? (1 - outroEmblemReveal) * 18 : outerFade * 18}px`)
       stage.style.setProperty('--culture-emblem-focus-opacity', Math.max(introFocus, outroFocus))
       stage.style.setProperty('--culture-black-opacity', 0)
       stage.style.setProperty('--culture-window-opacity', windowTakeover * (1 - outroWindowFade))
@@ -156,11 +163,14 @@ export default function CultureImmersiveStage() {
         const visibility = frameVisibility(progress, center, frameSpacing)
         const local = clamp((progress - (center - frameSpacing / 2)) / frameSpacing)
         const lyricReveal = smoothRange(local, 0.34, 0.56)
-        const blur = (1 - visibility) * 18
+        const isActive = visibility > 0.01
+        const nextVisibility = isActive ? 'visible' : 'hidden'
 
         element.style.opacity = visibility
-        element.style.visibility = visibility > 0.01 ? 'visible' : 'hidden'
-        element.style.filter = `blur(${blur}px)`
+        if (element.style.visibility !== nextVisibility) {
+          element.style.visibility = nextVisibility
+          element.style.willChange = isActive ? 'opacity, transform' : 'auto'
+        }
         element.style.transform = `scale(${1.035 - local * 0.035})`
         element.style.setProperty('--culture-lyric-opacity', visibility * lyricReveal)
         element.style.setProperty('--culture-lyric-shift', `${(1 - lyricReveal) * 22}px`)
@@ -203,7 +213,7 @@ export default function CultureImmersiveStage() {
         <HaitangViewport
           frames={frames}
           finaleRevealed={finaleRevealed}
-          onFinaleReveal={() => setFinaleRevealed(true)}
+          onFinaleReveal={revealFinale}
         />
         <FullEmblem />
         <div className="culture-scroll-cue" aria-hidden="true">

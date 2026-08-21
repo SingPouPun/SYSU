@@ -1,12 +1,13 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { gsap } from 'gsap'
+import { readExperienceProgress, writeExperienceProgress } from '../../utils/experienceProgress.js'
 
 const CAMPUSES = [
-  { id: 'south', name: '南校园', nickname: '康乐园', city: '广州', map: '/campuses/south-map.png', photos: ['/campuses/south-map.png', '/campuses/south.jpg'] },
-  { id: 'east', name: '东校园', nickname: '中东', city: '广州', map: '/campuses/east-map.png', photos: ['/campuses/east-map.png', '/campuses/east.png'] },
-  { id: 'north', name: '北校园', nickname: '红楼', city: '广州', map: '/campuses/north-map.png', photos: ['/campuses/north-map.png', '/campuses/north.jpg'] },
-  { id: 'zhuhai', name: '珠海校区', nickname: '中珠', city: '珠海', map: '/campuses/zhuhai-map.png', photos: ['/campuses/zhuhai-map.png', '/campuses/zhuhai.jpg'] },
-  { id: 'shenzhen', name: '深圳校区', nickname: '中深', city: '深圳', map: '/campuses/shenzhen-map.png', photos: ['/campuses/shenzhen-map.png', '/campuses/shenzhen.jpg'] },
+  { id: 'south', name: '南校园', nickname: '康乐园', city: '广州', map: '/campuses/south-map.png', photos: ['/campuses/south-map.png', '/campuses/south.jpg', '/campuses/east-02.webp', '/campuses/east-03.webp', '/campuses/south-03.webp', '/campuses/south-04.webp'] },
+  { id: 'east', name: '东校园', nickname: '中东', city: '广州', map: '/campuses/east-map.png', photos: ['/campuses/east-map.png', '/campuses/east.png', '/campuses/zhuhai-02.webp', '/campuses/zhuhai-03.webp', '/campuses/east-04.webp', '/campuses/east-05.webp', '/campuses/east-06.webp', '/campuses/east-07.webp'] },
+  { id: 'north', name: '北校园', nickname: '红楼', city: '广州', map: '/campuses/north-map.png', photos: ['/campuses/north-map.png', '/campuses/north.jpg', '/campuses/north-02.png', '/campuses/north-03.png', '/campuses/north-04.png'] },
+  { id: 'zhuhai', name: '珠海校区', nickname: '中珠', city: '珠海', map: '/campuses/zhuhai-map.png', photos: ['/campuses/zhuhai-map.png', '/campuses/zhuhai.jpg', '/campuses/shenzhen-02.webp', '/campuses/shenzhen-03.webp', '/campuses/zhuhai-04.webp', '/campuses/zhuhai-05.webp'] },
+  { id: 'shenzhen', name: '深圳校区', nickname: '中深', city: '深圳', map: '/campuses/shenzhen-map.png', photos: ['/campuses/shenzhen-map.png', '/campuses/shenzhen.jpg', '/campuses/shenzhen-04.webp', '/campuses/shenzhen-05.webp', '/campuses/shenzhen-06.webp', '/campuses/shenzhen-07.webp'] },
 ]
 
 const CARD_LANDING = [
@@ -22,11 +23,22 @@ function randomBetween(min, max) {
 }
 
 export default function CampusFileGallery() {
+  const initialProgressRef = useRef(null)
+  if (initialProgressRef.current === null) {
+    const stored = readExperienceProgress('sysu-campus-archive-progress', {})
+    initialProgressRef.current = {
+      envelopeOpen: stored?.envelopeOpen === true,
+      viewed: Array.isArray(stored?.viewed)
+        ? stored.viewed.filter((id) => CAMPUSES.some((campus) => campus.id === id))
+        : [],
+    }
+  }
+  const initialProgress = initialProgressRef.current
   const rootRef = useRef(null)
   const viewerRef = useRef(null)
   const imageRef = useRef(null)
   const initializedRef = useRef(false)
-  const openedRef = useRef(false)
+  const openedRef = useRef(initialProgress.envelopeOpen)
   const landingJitterRef = useRef(CARD_LANDING.map(() => ({
     x: randomBetween(-26, 26),
     y: randomBetween(-20, 20),
@@ -35,7 +47,8 @@ export default function CampusFileGallery() {
   const [activeCampus, setActiveCampus] = useState(CAMPUSES[0])
   const [photoIndex, setPhotoIndex] = useState(0)
   const [viewerOpen, setViewerOpen] = useState(false)
-  const [envelopeOpen, setEnvelopeOpen] = useState(false)
+  const [envelopeOpen, setEnvelopeOpen] = useState(initialProgress.envelopeOpen)
+  const [viewedCampuses, setViewedCampuses] = useState(initialProgress.viewed)
 
   useLayoutEffect(() => {
     const root = rootRef.current
@@ -43,12 +56,22 @@ export default function CampusFileGallery() {
 
     const context = gsap.context(() => {
       const cards = gsap.utils.toArray('.campus-file-card')
-      gsap.set(cards, { x: 0, y: 0, rotation: 0, scale: 0.62, autoAlpha: 0 })
+      gsap.set(cards, { x: 0, y: 0, rotation: 0, scale: openedRef.current ? 1 : 0.62, autoAlpha: openedRef.current ? 1 : 0 })
       gsap.set('.campus-envelope', { x: 0, rotation: -2.5 })
       gsap.set('.campus-envelope-mouth', { x: 0, scaleY: 1 })
     }, root)
 
     initializedRef.current = true
+
+    if (openedRef.current) {
+      const cards = [...root.querySelectorAll('.campus-file-card')]
+      const targets = getCardTargets(root, cards)
+      gsap.set(cards, {
+        x: (index) => targets[index].x,
+        y: (index) => targets[index].y,
+        rotation: (index) => targets[index].rotation,
+      })
+    }
 
     const resizeObserver = new ResizeObserver(() => {
       if (!openedRef.current) return
@@ -103,6 +126,10 @@ export default function CampusFileGallery() {
     if (openedRef.current || !rootRef.current) return
     openedRef.current = true
     setEnvelopeOpen(true)
+    writeExperienceProgress('sysu-campus-archive-progress', {
+      envelopeOpen: true,
+      viewed: viewedCampuses,
+    })
 
     const root = rootRef.current
     const cards = [...root.querySelectorAll('.campus-file-card')]
@@ -146,6 +173,14 @@ export default function CampusFileGallery() {
     setActiveCampus(campus)
     setPhotoIndex(0)
     setViewerOpen(true)
+    setViewedCampuses((current) => {
+      const next = current.includes(campus.id) ? current : [...current, campus.id]
+      writeExperienceProgress('sysu-campus-archive-progress', {
+        envelopeOpen: true,
+        viewed: next,
+      })
+      return next
+    })
 
     window.requestAnimationFrame(() => {
       gsap.fromTo(viewerRef.current, {
@@ -243,7 +278,7 @@ export default function CampusFileGallery() {
         <div className="campus-card-field">
           {CAMPUSES.map((campus, index) => (
             <button
-              className="campus-file-card"
+              className={`campus-file-card${viewedCampuses.includes(campus.id) ? ' is-viewed' : ''}`}
               data-button-feedback="custom"
               key={campus.id}
               type="button"

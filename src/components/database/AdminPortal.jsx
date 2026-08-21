@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import AuthModal from '../auth/AuthModal.jsx'
 import DatabaseDashboard from './DatabaseDashboard.jsx'
+import { clearExperienceProgress } from '../../utils/experienceProgress.js'
 
 async function postWithCsrf(path) {
   const tokenResponse = await fetch('/api/csrf-token')
@@ -37,8 +38,8 @@ export default function AdminPortal() {
 
   async function logout() {
     await postWithCsrf('/api/auth/logout')
-    setUser(null)
-    setAuthVisible(true)
+    clearExperienceProgress()
+    window.location.replace('/')
   }
 
   return (

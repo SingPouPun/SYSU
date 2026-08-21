@@ -14,11 +14,15 @@ function getOrbitSlot(bookIndex, currentIndex) {
   return (bookIndex - currentIndex + ARCHIVE_BOOKS.length) % ARCHIVE_BOOKS.length
 }
 
-export default function ArchiveLibrary({ onOpenChapter }) {
+export default function ArchiveLibrary({ initialChapterId, onOpenChapter }) {
   const stageRef = useRef(null)
   const isSwitchingRef = useRef(false)
   const hasPositionedRef = useRef(false)
-  const [currentIndex, setCurrentIndex] = useState(0)
+  const initialIndex = Math.max(
+    0,
+    ARCHIVE_BOOKS.findIndex((book) => book.chapter === initialChapterId),
+  )
+  const [currentIndex, setCurrentIndex] = useState(initialIndex)
 
   const currentBook = ARCHIVE_BOOKS[currentIndex]
 
@@ -178,7 +182,7 @@ export default function ArchiveLibrary({ onOpenChapter }) {
       </div>
 
       <div className="archive-library-status" aria-hidden="true">
-        <span>HOVER TO EJECT · CLICK TO ENTER</span>
+
         <i />
         <b>{currentBook.number}</b>
       </div>

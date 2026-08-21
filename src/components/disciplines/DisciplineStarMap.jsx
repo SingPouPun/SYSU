@@ -1,6 +1,7 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { gsap } from 'gsap'
 import { DISCIPLINE_CATALOG } from '../../data/disciplineCatalog.js'
+import { readExperienceProgress, writeExperienceProgress } from '../../utils/experienceProgress.js'
 
 const GOLD = '#e7c65a'
 const NAVY = '#08264d'
@@ -53,6 +54,19 @@ function CollegeButtons({ colleges, onSelect, readColleges }) {
 }
 
 export default function DisciplineStarMap() {
+  const initialProgressRef = useRef(null)
+  if (initialProgressRef.current === null) {
+    const stored = readExperienceProgress('sysu-discipline-progress', {})
+    const validIds = new Set(DISCIPLINE_CATALOG.map((item) => item.id))
+    const validColleges = new Set(DISCIPLINE_CATALOG.flatMap((item) => item.colleges.map(getCollegeKey)))
+    initialProgressRef.current = {
+      visited: Array.isArray(stored?.visited) ? stored.visited.filter((id) => validIds.has(id)) : [],
+      readColleges: Array.isArray(stored?.readColleges)
+        ? stored.readColleges.filter((key) => validColleges.has(key))
+        : [],
+    }
+  }
+  const initialProgress = initialProgressRef.current
   const rootRef = useRef(null)
   const nodeRefs = useRef([])
   const canvasRefs = useRef([])
@@ -60,8 +74,8 @@ export default function DisciplineStarMap() {
   const activeRef = useRef(null)
   const [activeId, setActiveId] = useState(null)
   const [selectedCollege, setSelectedCollege] = useState(null)
-  const [visited, setVisited] = useState([])
-  const [readColleges, setReadColleges] = useState(() => new Set())
+  const [visited, setVisited] = useState(initialProgress.visited)
+  const [readColleges, setReadColleges] = useState(() => new Set(initialProgress.readColleges))
   const activeCategory = DISCIPLINE_CATALOG.find((item) => item.id === activeId)
   const rays = useMemo(() => Array.from({ length: 68 }, (_, index) => ({ angle: index * (360 / 68), length: 84 + ((index * 37) % 76) })), [])
 
@@ -124,7 +138,14 @@ export default function DisciplineStarMap() {
     }
     setActiveId(item.id)
     setSelectedCollege(null)
-    setVisited((current) => current.includes(item.id) ? current : [...current, item.id])
+    setVisited((current) => {
+      const next = current.includes(item.id) ? current : [...current, item.id]
+      writeExperienceProgress('sysu-discipline-progress', {
+        visited: next,
+        readColleges: [...readColleges],
+      })
+      return next
+    })
   }
 
   const chooseCollege = (item) => {
@@ -132,6 +153,10 @@ export default function DisciplineStarMap() {
     setReadColleges((current) => {
       const next = new Set(current)
       next.add(getCollegeKey(item))
+      writeExperienceProgress('sysu-discipline-progress', {
+        visited,
+        readColleges: [...next],
+      })
       return next
     })
   }

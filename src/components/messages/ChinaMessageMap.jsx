@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import MessageResonance, { preloadMessageResonanceAssets } from './MessageResonance.jsx'
 import MapStarLift from './MapStarLift.jsx'
+import { DEMO_MODE } from '../../config/runtime.js'
 
 const VIEWBOX = { width: 1240, height: 790 }
 const GEO_BOUNDS = { minLng: 73, maxLng: 135, minLat: 17, maxLat: 54 }
@@ -104,6 +105,13 @@ export default function ChinaMessageMap({ active = false, user, onRequestLogin, 
   }, [active])
 
   useEffect(() => {
+    if (import.meta.env.DEV && DEMO_MODE) {
+      let cancelled = false
+      import('../../data/demoMessages.js').then(({ DEMO_MESSAGE_SUMMARY }) => {
+        if (!cancelled) setMessageSummary(DEMO_MESSAGE_SUMMARY)
+      })
+      return () => { cancelled = true }
+    }
     let cancelled = false
     let timer
     const refreshMessages = () => fetch('/api/messages')
@@ -173,7 +181,9 @@ export default function ChinaMessageMap({ active = false, user, onRequestLogin, 
     ?? { count: 0, message: '这里尚未点亮，等待第一封来自此地的中大寄语。' }
   const total = messageSummary?.count ?? 0
   const goal = messageSummary?.goal ?? 40
-  const qualified = total >= goal
+  const progressPercent = Math.min(100, Math.round((total / Math.max(goal, 1)) * 100))
+  const isAdmin = Boolean(user?.is_admin)
+  const qualified = total >= goal || isAdmin
   const [shenzhenX, shenzhenY] = project(SHENZHEN)
 
   useEffect(() => () => window.clearTimeout(launchTimerRef.current), [])
@@ -202,6 +212,10 @@ export default function ChinaMessageMap({ active = false, user, onRequestLogin, 
 
   const submitMessage = async (event) => {
     event.preventDefault()
+    if (DEMO_MODE) {
+      setSubmitStatus({ type: 'success', text: '演示模式使用内存数据，不会写入生产数据库。' })
+      return
+    }
     if (!user) {
       onRequestLogin?.()
       return
@@ -238,7 +252,7 @@ export default function ChinaMessageMap({ active = false, user, onRequestLogin, 
     <div className={`message-map-lab${mapLaunching ? ' is-launching-stars' : ''}${resonanceOpen ? ' is-resonance-open' : ''}`}>
       <div className="message-map-toolbar">
         <span>SYSU MESSAGE MIGRATION</span>
-        <b>{total} 封寄语</b>
+        <b>{progressPercent}%</b>
         <i>{Object.keys(messageSignals).length} 个省份已点亮</i>
         <button
           type="button"
@@ -387,7 +401,9 @@ export default function ChinaMessageMap({ active = false, user, onRequestLogin, 
           <div className="message-map-count"><b>{String(selected.count).padStart(2, '0')}</b><span>封寄语<br />MESSAGES</span></div>
           <blockquote>“{selected.message}”</blockquote>
           <form className="message-compose" onSubmit={submitMessage}>
-            {!user ? (
+            {DEMO_MODE ? (
+              <p className="message-compose-complete">演示模式：40 条寄语仅保存在前端内存中。</p>
+            ) : !user ? (
               <button className="message-compose-login" type="button" onClick={onRequestLogin}>
                 登录后留下寄语
               </button>
@@ -434,15 +450,15 @@ export default function ChinaMessageMap({ active = false, user, onRequestLogin, 
             {submitStatus && <p className={`message-compose-status is-${submitStatus.type}`}>{submitStatus.text}</p>}
           </form>
           <div className="message-map-progress">
-            <span><b>寄语汇聚进度</b><i>{Math.min(total, goal)} / {goal}</i></span>
-            <em><i style={{ width: `${Math.min(100, (total / goal) * 100)}%` }} /></em>
+            <span><b>寄语汇聚进度</b><i>{progressPercent}%</i></span>
+            <em><i style={{ width: `${progressPercent}%` }} /></em>
           </div>
           <button
             type="button"
             disabled={mapLaunching || !qualified}
             onClick={qualified ? replayResonance : undefined}
           >
-            {mapLaunching ? '星光正在升起' : qualified ? '开始' : `还差 ${Math.max(0, goal - total)} 封寄语`}
+            {mapLaunching ? '星光正在升起' : isAdmin && total < goal ? '管理员预览' : qualified ? '开始' : `进度 ${progressPercent}%`}
           </button>
         </aside>
       </div>

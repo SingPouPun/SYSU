@@ -31,6 +31,7 @@ export default function AuthModal({
   visible,
   user,
   onAuthenticated,
+  onLogout,
   onClose,
   openAdminOnSuccess = false,
 }) {
@@ -89,17 +90,34 @@ export default function AuthModal({
     }
   }
 
+  async function logout() {
+    setBusy(true)
+    setStatus('')
+    try {
+      await requestWithCsrf('/api/auth/logout', {})
+      onLogout()
+      onClose()
+    } catch (error) {
+      setStatus(error.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
-    <div className="account-modal-backdrop" role="presentation" onMouseDown={(event) => {
+    <div className={`account-modal-backdrop${user ? ' account-modal-backdrop--profile' : ''}`} role="presentation" onMouseDown={(event) => {
       if (event.target === event.currentTarget) onClose()
     }}>
       <section className={`account-modal${user ? ' account-modal--profile' : ''}`} role="dialog" aria-modal="true" aria-label="中山大学账号入口">
-        <button className="account-modal-close" type="button" onClick={onClose} aria-label="关闭">×</button>
+        {!user && <button className="account-modal-close" type="button" onClick={onClose} aria-label="关闭">×</button>}
 
         {user ? (
           <div className="account-profile-card">
             <strong>{user.username}</strong>
             <p>{user.province || '未填写省份'} {user.city || '未填写城市'}</p>
+            <button type="button" onClick={logout} disabled={busy}>
+              {busy ? '登出中…' : status || '登出'}
+            </button>
           </div>
         ) : (
           <>

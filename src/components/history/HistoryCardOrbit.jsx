@@ -10,8 +10,34 @@ const HISTORY_ERAS = [
   { id: 'renewal', title: '开新', accent: '#397269', images: ['/history/renewal-01.png'] },
   { id: 'merger', title: '合璧', accent: '#276D70', images: ['/history/merger-01.png'] },
   { id: 'three-campuses', title: '鼎立', accent: '#856B3C', images: ['/history/three-campuses-01.png'] },
-  { id: 'century', title: '世纪', accent: '#792F38', images: ['/history/century-01.jpg', '/history/century-02.jpg', '/history/century-03.png'] },
+  { id: 'century', title: '世纪', accent: '#792F38', images: ['/history/century-01.jpg', '/history/century-02.jpg', '/history/century-03.png', '/history/century-04.webp', '/history/century-05.webp', '/history/century-06.webp', '/campuses/south-02.webp'] },
 ]
+
+const HISTORY_PROGRESS_KEY = 'sysu-history-card-progress'
+
+function loadHistoryProgress() {
+  const fallback = { unlocked: false, viewed: [], futureUnlocked: false, futureRead: false }
+
+  try {
+    const stored = JSON.parse(localStorage.getItem(HISTORY_PROGRESS_KEY) ?? 'null')
+    if (!stored || typeof stored !== 'object') return fallback
+
+    const viewed = Array.isArray(stored.viewed)
+      ? stored.viewed.filter((index) => Number.isInteger(index) && index >= 0 && index < HISTORY_ERAS.length)
+      : []
+    const futureRead = stored.futureRead === true
+    const futureUnlocked = futureRead || stored.futureUnlocked === true
+
+    return {
+      unlocked: futureUnlocked || viewed.length > 0 || stored.unlocked === true,
+      viewed: futureUnlocked ? HISTORY_ERAS.map((_, index) => index) : [...new Set(viewed)],
+      futureUnlocked,
+      futureRead,
+    }
+  } catch {
+    return fallback
+  }
+}
 
 function finalPose(root, index) {
   const width = root.clientWidth
@@ -28,22 +54,53 @@ function finalPose(root, index) {
   }
 }
 
+function completedPose(root, index) {
+  const pose = finalPose(root, index)
+  return {
+    ...pose,
+    x: pose.x * 0.84,
+    y: pose.y + Math.min(Math.max(root.clientHeight * 0.17, 96), 132),
+    scale: pose.scale * 0.82,
+  }
+}
+
 export default function HistoryCardOrbit() {
+  const initialProgressRef = useRef(null)
+  if (initialProgressRef.current === null) initialProgressRef.current = loadHistoryProgress()
+  const initialProgress = initialProgressRef.current
   const rootRef = useRef(null)
   const activeIndexRef = useRef(null)
-  const viewedErasRef = useRef(new Set())
+  const viewedErasRef = useRef(new Set(initialProgress.viewed))
   const futureUnlockingRef = useRef(false)
-  const futureModeRef = useRef(false)
-  const archiveUnlockedRef = useRef(false)
+  const futureModeRef = useRef(initialProgress.futureUnlocked)
+  const futureReadRef = useRef(initialProgress.futureRead)
+  const archiveUnlockedRef = useRef(initialProgress.unlocked)
   const entranceTimelineRef = useRef(null)
   const [activeIndex, setActiveIndex] = useState(null)
   const [activeImageIndex, setActiveImageIndex] = useState(0)
-  const [viewedCount, setViewedCount] = useState(0)
-  const [futureMode, setFutureMode] = useState(false)
+  const [viewedCount, setViewedCount] = useState(initialProgress.viewed.length)
+  const [futureMode, setFutureMode] = useState(initialProgress.futureUnlocked)
   const [futureOpen, setFutureOpen] = useState(false)
-  const [archiveUnlocked, setArchiveUnlocked] = useState(false)
+  const [archiveUnlocked, setArchiveUnlocked] = useState(initialProgress.unlocked)
+  const [archiveComplete, setArchiveComplete] = useState(initialProgress.futureRead)
 
   activeIndexRef.current = activeIndex
+
+  function persistProgress(overrides = {}) {
+    const progress = {
+      unlocked: archiveUnlockedRef.current,
+      viewed: [...viewedErasRef.current].sort((a, b) => a - b),
+      futureUnlocked: futureModeRef.current,
+      futureRead: futureReadRef.current,
+      ...overrides,
+    }
+
+    try {
+      localStorage.setItem(HISTORY_PROGRESS_KEY, JSON.stringify(progress))
+    } catch {
+      // 无痕或受限环境中仍保留本次会话内的阅读进度。
+    }
+  }
 
   useLayoutEffect(() => {
     if (activeIndex === null) return undefined
@@ -86,12 +143,45 @@ export default function HistoryCardOrbit() {
       })
     }
 
+    function settleCompletedArchive(duration = 0) {
+      const newChapterCard = root.querySelector('.history-new-chapter-card')
+      slots.forEach((slot, index) => {
+        gsap.to(slot, {
+          ...completedPose(root, index),
+          autoAlpha: 1,
+          zIndex: 10 + index,
+          duration,
+          ease: duration ? 'power3.inOut' : 'none',
+          overwrite: true,
+        })
+      })
+      gsap.to(newChapterCard, {
+        x: 0,
+        y: Math.max(root.clientHeight * -0.22, -166),
+        rotationY: 0,
+        scale: 0.9,
+        autoAlpha: 1,
+        zIndex: 70,
+        duration,
+        ease: duration ? 'power3.inOut' : 'none',
+        overwrite: true,
+      })
+      root.classList.add('is-ready', 'is-future-ready', 'has-complete-archive')
+    }
+
     function playCdEntrance() {
       if (futureModeRef.current || futureUnlockingRef.current) return
+
+      if (archiveUnlockedRef.current) {
+        settleCards(0)
+        root.classList.add('is-ready')
+        return
+      }
 
       entranceTimelineRef.current?.kill()
       archiveUnlockedRef.current = true
       setArchiveUnlocked(true)
+      persistProgress({ unlocked: true })
       setActiveIndex(null)
       root.classList.add('is-history-entering')
       root.classList.remove('is-ready')
@@ -184,7 +274,16 @@ export default function HistoryCardOrbit() {
     }
 
     function handleCdChapterEntered(event) {
-      if (event.detail?.id === 'history') playCdEntrance()
+      if (event.detail?.id !== 'history') return
+      if (futureReadRef.current) {
+        settleCompletedArchive(0)
+      } else if (futureModeRef.current) {
+        gsap.set(slots, { autoAlpha: 0 })
+        gsap.set(root.querySelector('.history-new-chapter-card'), { autoAlpha: 1, rotationY: 0, scale: 1 })
+        root.classList.add('is-future-ready')
+      } else {
+        playCdEntrance()
+      }
     }
 
     gsap.set(slots, {
@@ -196,8 +295,21 @@ export default function HistoryCardOrbit() {
     })
     window.addEventListener('sysu:cd-chapter-entered', handleCdChapterEntered)
 
+    if (futureReadRef.current) {
+      settleCompletedArchive(0)
+    } else if (futureModeRef.current) {
+      gsap.set(slots, { autoAlpha: 0 })
+      gsap.set(root.querySelector('.history-new-chapter-card'), { autoAlpha: 1, rotationY: 0, scale: 1 })
+      root.classList.add('is-future-ready')
+    } else if (archiveUnlockedRef.current) {
+      settleCards(0)
+      root.classList.add('is-ready')
+    }
+
     const resizeObserver = new ResizeObserver(() => {
-      if (archiveUnlockedRef.current && activeIndexRef.current === null && !futureModeRef.current && !futureUnlockingRef.current) {
+      if (futureReadRef.current && activeIndexRef.current === null) {
+        settleCompletedArchive(0.3)
+      } else if (archiveUnlockedRef.current && activeIndexRef.current === null && !futureModeRef.current && !futureUnlockingRef.current) {
         settleCards(0.3)
       }
     })
@@ -212,12 +324,13 @@ export default function HistoryCardOrbit() {
   }, [])
 
   function selectEra(index) {
-    if (!archiveUnlockedRef.current || activeIndexRef.current !== null || futureUnlockingRef.current || futureModeRef.current) return
+    if (!archiveUnlockedRef.current || activeIndexRef.current !== null || futureUnlockingRef.current || (futureModeRef.current && !futureReadRef.current)) return
 
     const root = rootRef.current
     const slots = [...root.querySelectorAll('.history-era-slot')]
     viewedErasRef.current.add(index)
     setViewedCount(viewedErasRef.current.size)
+    persistProgress()
     setActiveImageIndex(0)
     setActiveIndex(index)
 
@@ -256,7 +369,7 @@ export default function HistoryCardOrbit() {
     const slots = [...root.querySelectorAll('.history-era-slot')]
     slots.forEach((slot, index) => {
       gsap.to(slot, {
-        ...finalPose(root, index),
+        ...(futureReadRef.current ? completedPose(root, index) : finalPose(root, index)),
         autoAlpha: 1,
         zIndex: 10 + index,
         duration,
@@ -308,6 +421,7 @@ export default function HistoryCardOrbit() {
         })
         futureModeRef.current = true
         setFutureMode(true)
+        persistProgress({ futureUnlocked: true })
       })
       .to(newChapterCard, {
         rotationY: 0,
@@ -351,6 +465,45 @@ export default function HistoryCardOrbit() {
     if (!activeEra || activeEra.images.length < 2) return
     const imageCount = activeEra.images.length
     setActiveImageIndex((nextIndex + imageCount) % imageCount)
+  }
+
+  function closeFutureChapter() {
+    setFutureOpen(false)
+    if (futureReadRef.current) return
+
+    const root = rootRef.current
+    const slots = [...root.querySelectorAll('.history-era-slot')]
+    const newChapterCard = root.querySelector('.history-new-chapter-card')
+    futureReadRef.current = true
+    setArchiveComplete(true)
+    persistProgress({ futureRead: true, futureUnlocked: true })
+    root.classList.add('has-complete-archive', 'is-ready')
+
+    gsap.timeline()
+      .to(newChapterCard, {
+        y: Math.max(root.clientHeight * -0.22, -166),
+        scale: 0.9,
+        duration: 0.72,
+        ease: 'power3.inOut',
+      })
+      .set(slots, {
+        x: 0,
+        y: 120,
+        rotation: 0,
+        scale: 0.62,
+        autoAlpha: 0,
+      })
+      .to(slots, {
+        x: (index) => completedPose(root, index).x,
+        y: (index) => completedPose(root, index).y,
+        rotation: (index) => completedPose(root, index).rotation,
+        scale: (index) => completedPose(root, index).scale,
+        autoAlpha: 1,
+        zIndex: (index) => 10 + index,
+        duration: 0.72,
+        stagger: 0.065,
+        ease: 'expo.out',
+      }, '-=0.28')
   }
 
   function moveCardWithPointer(event) {
@@ -400,10 +553,10 @@ export default function HistoryCardOrbit() {
   const activeEra = activeIndex === null ? null : HISTORY_ERAS[activeIndex]
 
   return (
-    <div className={`history-card-orbit ${archiveUnlocked ? 'is-archive-unlocked' : ''} ${activeIndex !== null ? 'has-active-card' : ''} ${futureMode ? 'has-future-card' : ''}`} ref={rootRef}>
+    <div className={`history-card-orbit ${archiveUnlocked ? 'is-archive-unlocked' : ''} ${activeIndex !== null ? 'has-active-card' : ''} ${futureMode ? 'has-future-card' : ''} ${archiveComplete ? 'has-complete-archive' : ''}`} ref={rootRef}>
       <div className="history-orbit-caption" aria-live="polite">
         <small>{futureMode ? 'THE NEXT CHAPTER' : `SYSU CENTURY ARCHIVE · ${viewedCount}/8`}</small>
-        <strong>{futureMode ? '2026—' : '1924—2024'}</strong>
+        <strong>{futureMode ? '2026-' : '1924—2024'}</strong>
       </div>
 
       {HISTORY_ERAS.map((era, index) => (
@@ -416,7 +569,7 @@ export default function HistoryCardOrbit() {
             onClick={() => selectEra(index)}
             onPointerMove={moveCardWithPointer}
             onPointerLeave={resetCardPointer}
-            tabIndex={archiveUnlocked && activeIndex === null && !futureMode ? 0 : -1}
+            tabIndex={archiveUnlocked && activeIndex === null && (!futureMode || archiveComplete) ? 0 : -1}
             aria-label={`查看${era.title}阶段`}
           >
             <span className="history-era-cover">
@@ -482,7 +635,7 @@ export default function HistoryCardOrbit() {
       {futureOpen && createPortal(
         <section className="history-future-overlay" aria-label="校史新章">
           <img src="/history/new-chapter.png" alt="中山大学新章校园绘景" />
-          <button type="button" onClick={() => setFutureOpen(false)} aria-label="关闭新章图片">×</button>
+          <button type="button" onClick={closeFutureChapter} aria-label="关闭新章图片">×</button>
         </section>,
         document.body,
       )}

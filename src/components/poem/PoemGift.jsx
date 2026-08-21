@@ -1,40 +1,53 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-
-const LINES = [
-  '檀木葳蕤，晶莹悄上枝头，恰似故人游。',
-  '叶纵飘零，清川悠然自流，又逢一金秋。',
-  '尺素未寄，万般心曲萦喉，欲书却还休。',
-  '砚池尚温，斜倚玉栏西楼，清辉托雁首。',
-]
+import { readExperienceProgress, writeExperienceProgress } from '../../utils/experienceProgress.js'
 
 export default function PoemGift({ visible, onClose }) {
-  const [opened, setOpened] = useState(false)
+  const [opened, setOpened] = useState(() => readExperienceProgress('sysu-poem-opened', false) === true)
 
   useEffect(() => {
-    if (visible) setOpened(false)
+    if (visible) setOpened(readExperienceProgress('sysu-poem-opened', false) === true)
   }, [visible])
+
+  useEffect(() => {
+    if (!visible) return undefined
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [visible, onClose])
 
   if (!visible) return null
 
   return createPortal(
-    <div className={`poem-gift${opened ? ' is-open' : ''}`} role="dialog" aria-modal="true" aria-label="中大小词礼包">
-      <button className="poem-gift-backdrop" type="button" aria-label="关闭小词礼包" onClick={onClose} />
+    <div className={`poem-gift${opened ? ' is-open' : ''}`} role="dialog" aria-modal="true" aria-labelledby="poem-gift-title">
+      <button className="poem-gift-backdrop" type="button" aria-label="关闭小诗礼包" onClick={onClose} />
       <section className="poem-gift-package">
         <button className="poem-gift-close" type="button" aria-label="关闭" onClick={onClose}>×</button>
-        {!opened ? (
-          <button className="poem-gift-seal" type="button" onClick={() => setOpened(true)}>
-            <small>SYSU · MESSAGE GIFT</small>
-            <strong>一阕小词</strong>
-            <span>启封</span>
-          </button>
-        ) : (
-          <article className="poem-gift-paper">
-            <header><b>中山大学 SYSU</b></header>
-            <div>{LINES.map((line) => <p key={line}>{line}</p>)}</div>
-            <footer><span>山高水长</span><i>中大</i></footer>
-          </article>
-        )}
+        <button
+          className="poem-gift-seal"
+          type="button"
+          aria-label="展开一首小诗"
+          aria-expanded={opened}
+          tabIndex={opened ? -1 : 0}
+          onClick={() => {
+            setOpened(true)
+            writeExperienceProgress('sysu-poem-opened', true)
+          }}
+        >
+          <strong id="poem-gift-title">
+            <img src="/poem/poem-title-calligraphy.jpg" alt="小诗" />
+          </strong>
+          <span>轻触启封</span>
+        </button>
+        <article className="poem-gift-paper" aria-hidden={!opened}>
+          <img
+            className="poem-gift-body-calligraphy"
+            src="/poem/poem-body-calligraphy.jpg"
+            alt="一叶辞柯一岁秋，桂香入袖几回眸。欲把心事裁成句，只恐言轻负此秋。"
+          />
+        </article>
       </section>
     </div>,
     document.body,
